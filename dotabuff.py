@@ -179,7 +179,11 @@ def parse_item_sequence(soup):
     for player in players:
         hero = player.find('a', {'href':hero_finder}).find('img')['alt']
         for buy in player.findAll('div',{'class':'segment expanded'}):
-            time_stamp = duration_to_sec(buy.find('div',{'class':'time'}).text)
+            time_txt = buy.find('div',{'class':'time'})
+            if time_txt is None:
+                continue
+            else:
+                time_stamp = duration_to_sec(time_txt.text)
             items = [x['alt'] for x in buy.findAll('img')]
             df_user = pd.DataFrame(items)
             df_user['time_stamp'] = time_stamp
