@@ -10,6 +10,8 @@ import pandas as pd
 import numpy as np
 import bs4
 import requests
+import time
+import os
 
 
 stat_fix = re.compile('[k]')
@@ -118,7 +120,6 @@ def parse_ability_builds(soup):
                 level = int(entry.text)
                 skill_arr[level - 1] = name
         ability_arr = ability_arr + skill_arr
-    print len(ability_arr)
     ability_arr = np.reshape(ability_arr, (10,25))
     df = pd.DataFrame(ability_arr, columns = ability_col_names)
     df['match_id'] = match_id
@@ -128,10 +129,14 @@ def parse_ability_builds(soup):
 
 def get_match_details(soup):
     match_id = get_match_id(soup)
-    dds = soup.find('div',{'id':'content-header-secondary'}).find_all('dd')
+    dds = soup.find('div',{id:'content-header-secondary'}).find_all('dd')
     details = [x.text for x in dds[:-1]]
     details[-1] = duration_to_sec(details[-1])
     time_stamp = pd.to_datetime(dds[-1].find('time')['datetime'])
+
+    if len(dds) < 6:
+        match_id = np.append(match_id, ['Practice'])
+
     match_details = np.append(match_id, details)
     match_details = np.append(match_details, time_stamp)
     match_details[0] = int(match_details[0])
@@ -150,14 +155,15 @@ def duration_to_sec(dur_str):
 def get_match_ids(soup):
     return [int(x.text) for x in soup.find_all('a', href = match_href, text = match_id_parse)]
 
-def pull_all_match_pages(ids):
+def pull_all_match_pages(ids, path = './match_parse/'):
     for m_id in ids:
         base_url = 'http://www.dotabuff.com/matches/%d' % m_id
         for page in sub_pages:
             fetch_url = base_url + '/' + page
-            fName = os.path.join('D:/dota2_matches/%s/' % page, '%d_%s.txt' % (m_id,page))
+            fName = os.path.join(path, '%d_%s.txt' % (m_id,page))
             with open(fName, 'wb') as txt_file:
-                txt_file.write(requests.get(fetch_url).text.encode('UTF-8'))   
+                txt_file.write(requests.get(fetch_url).text.encode('UTF-8'))
+                time.sleep(1)
                 
 def get_picks_and_bans(soup):
     match_id = get_match_id(soup)
@@ -280,7 +286,69 @@ def update_match_ids(current_ids = None):
 	for i in range(1,51):
 	    match_soup = bs4.BeautifulSoup(requests.get('http://www.dotabuff.com/esports/matches?page=%d' % i).text)
 	    captured_match_ids = captured_match_ids + get_match_ids(match_soup)
+        time.sleep(1)
 
 	return np.unique(captured_match_ids + current_ids)
 
 
+def get_latest_matches():
+    # Get new matches
+    new_matches = update_match_ids()
+
+    # Keep only match ids that haven't been parsed yet
+    # TODO: pull current matches from DB
+    #sql_q = 'SELECT DISTINCT match_id FROM match_stats;'
+    # db.cursor()
+
+    matches_to_pull = [x for x in new_matches if x not in parsed_matches]
+
+    # DL all the files needed for the matches
+    pull_all_match_pages(matches_to_pull)
+
+    print "Found %d matches, pulled %d new matches" % (len(new_matches), len(matches_to_pull))
+
+
+def parse_recent_pull(path = './match_parse/'):
+    # find all of the match ids to parse
+    ids_to_parse = [f[:-5] for f in os.listdir(path) if os.path.isfile(os.path.join(path,f))]
+
+    for id in ids_to_parse:
+        # read in raw files
+        fName_match = id + '_.txt'
+        fName_builds = id + '_builds.txt'
+        fName_farm = id + '_farm.txt'
+        fName_obj = id + '_objectives.txt'
+        fName_runes = id + '_runes.txt'
+        fName_vision = id + '_vision.txt'
+        soup_match = bs4.BeautifulSoup(open(path % fName_match).read())
+        soup_build = bs4.BeautifulSoup(open(path % fName_builds).read())
+        soup_farm = bs4.BeautifulSoup(open(path % fName_farm).read())
+        soup_obj = bs4.BeautifulSoup(open(path % fName_obj).read())
+        soup_runes = bs4.BeautifulSoup(open(path % fName_runes).read())
+        soup_vision = bs4.BeautifulSoup(open(path % fName_vision).read())
+
+        # parse info
+        
+        # From match file
+        df_details = get_match_details(soup_match)
+        df_stats = parse_game_stats(soup_match)
+        df_pickban = get_picks_and_bans(soup_match)
+        df_xp = parse_diff_xp(soup_match)
+
+        # From build file
+        df_build = parse_ability_builds(soup_build)
+        df_item = parse_item_sequence(soup_build)
+
+        # From farm file
+        df_farm = parse_farm_charts(soup_farm)
+
+        # From obj file
+        df_perf = parse_performace(soup_obj)
+
+        # From runes file
+        df_runes = parse_runes(soup_runes)
+
+        # From vision file
+        df_vision = parse_vision(soup_vision)
+
+        # write to SQL tbls
