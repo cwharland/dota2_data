@@ -21,7 +21,7 @@ hero_finder = re.compile('\/heroes\/\w+')
 faction_find = re.compile('faction\-')
 
 stat_col_names = ['Team','Hero','Player','Level','Kills','Deaths','Assists','Gold','Last_Hits','Denies','XPM','GPM','Hero_Dmg','Hero_Healed','Tower_Damage','Item_1','Item_2','Item_3','Item_4','Item_5','Item_6']
-ability_col_names = ['Hero'] + ['Level_%d' % x for x in range(1,26)]
+ability_col_names = ['Level_%d' % x for x in range(1,26)]
 details_col_names = ['Tournment','Mode','Region','Duration']
 sub_pages = ['','builds','kills','farm','objectives','runes','vision','chat','log']
 sides = ['radiant','dire']
@@ -29,6 +29,18 @@ sides = ['radiant','dire']
 def get_match_id(soup):
     match_id = match_id_parse.findall(soup.find('div',{'class':'content-header-title'}).text)[0]
     return match_id
+
+def build_player_ids(soup):
+    build_ids = []
+    for user in soup.find_all('section',{'class':'performance-artifact'}):
+        build_ids.append(match_id_parse.findall(user.find('a',href=re.compile('player'))['href'])[0])
+    return build_ids
+
+def build_hero_list(soup):
+    hero_list = []
+    for user in soup.find_all('img',{'class':'image-hero image-avatar'}):
+        hero_list.append(user['alt'])
+    return hero_list
 
 def parse_match_section(sec):
     title = sec.find('header').text
@@ -38,14 +50,15 @@ def parse_match_section(sec):
         tds = tr.find_all('td')
         hero = tds[0].find('img')['title']
         player = tds[1].text
+        player_id = match_id_parse.findall(tds[1].find('a')['href'])[0]
         stats = [int(''.join(dig_fix.findall(stat_fix.sub('00',tds[i].text)))) for i in range(3,15)]
         items = [x['alt'] for x in tds[15].find_all('img')]
         if len(items) < 6:
             items = items + ['none']*(6-len(items))
-        parsed_row = [hero] + [player] + stats + items
+        parsed_row = [hero] + [player_id] + [player] + stats + items
         sec_stats = np.append(sec_stats,np.array(parsed_row))
     team_stats = np.array([title]*5).reshape((5,1))
-    team_stats = np.hstack((team_stats,np.reshape(sec_stats,(5,20))))
+    team_stats = np.hstack((team_stats,np.reshape(sec_stats,(5,21))))
     return team_stats
 
 def parse_game_stats(soup):
@@ -94,18 +107,22 @@ def parse_diff_gold(soup):
 def parse_ability_builds(soup):
     match_id = get_match_id(soup)
     ability_arr = []
-    for team in soup.find_all('article',{'class':'ability-builds'}):
-        for tr in team.find_all('tr')[1::]:
-            skill_arr = []
-            for td in tr.find_all('td'):
-                if td.find('img') is not None:
-                    skill_arr.append(td.find('img')['alt'])
-                else:
-                    skill_arr.append('none')
-            ability_arr = ability_arr + skill_arr
-    ability_arr = np.reshape(ability_arr, (10,26))
+    player_ids = build_player_ids(soup)
+    hero_list = build_hero_list(soup)
+    for player in soup.find_all('section',{'class':'performance-artifact'}):
+        skill_arr = ['']*25
+        for skill in player.find_all('div',{'class':'skill'}):
+            name = skill.find('img')['alt']
+            for entry in skill.find_all('div',{'class':'entry choice'}):
+                level = int(entry.text)
+                skill_arr[level - 1] = name
+        ability_arr = ability_arr + skill_arr
+    print len(ability_arr)
+    ability_arr = np.reshape(ability_arr, (10,25))
     df = pd.DataFrame(ability_arr, columns = ability_col_names)
     df['match_id'] = match_id
+    df['hero'] = hero_list
+    df['player_id'] = player_ids
     return df
 
 def get_match_details(soup):
@@ -192,7 +209,7 @@ def parse_farm_charts(soup):
     return df_team,df_hero
 
 def extract_amounts(txt):
-    t = ''.join(pull_nums.findall(txt))
+    t = ''.join(match_id_parse.findall(txt))
     if t == '':
         return 0
     else:
