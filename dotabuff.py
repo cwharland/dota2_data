@@ -20,7 +20,7 @@ pick_ban = re.compile('(ban|pick)')
 hero_finder = re.compile('\/heroes\/\w+')
 faction_find = re.compile('faction\-')
 
-stat_col_names = ['Team','Hero','Player','Level','Kills','Deaths','Assists','Gold','Last_Hits','Denies','XPM','GPM','Hero_Dmg','Hero_Healed','Tower_Damage','Item_1','Item_2','Item_3','Item_4','Item_5','Item_6']
+stat_col_names = ['Team','Hero', 'player_id','Player','Level','Kills','Deaths','Assists','Gold','Last_Hits','Denies','XPM','GPM','Hero_Dmg','Hero_Healed','Tower_Damage','Item_1','Item_2','Item_3','Item_4','Item_5','Item_6']
 ability_col_names = ['Level_%d' % x for x in range(1,26)]
 details_col_names = ['Tournment','Mode','Region','Duration']
 sub_pages = ['','builds','kills','farm','objectives','runes','vision','chat','log']
@@ -68,7 +68,7 @@ def parse_game_stats(soup):
     for side in sides:
         sec = soup.find('section',{'class':side})
         team_stats = np.append(team_stats, parse_match_section(sec))
-    team_stats = np.reshape(team_stats, (10,21))
+    team_stats = np.reshape(team_stats, (10,22))
     df = pd.DataFrame(team_stats, columns = stat_col_names)
     df['Side'] = teams
     df['match_id'] = match_id
