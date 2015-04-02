@@ -27,7 +27,7 @@ sub_pages = ['','builds','kills','farm','objectives','runes','vision','chat','lo
 sides = ['radiant','dire']
 
 def get_match_id(soup):
-    match_id = int(soup.findall(soup.find('div',{'class':'content-header-title'}).text)[0])
+    match_id = match_id_parse.findall(soup.find('div',{'class':'content-header-title'}).text)[0]
     return match_id
 
 def parse_match_section(sec):
