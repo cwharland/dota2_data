@@ -25,6 +25,7 @@ ability_col_names = ['Level_%d' % x for x in range(1,26)]
 details_col_names = ['Tournment','Mode','Region','Duration']
 sub_pages = ['','builds','kills','farm','objectives','runes','vision','chat','log']
 sides = ['radiant','dire']
+detail_cols = ['match_id', 'tournament_name','game_mode','location','game_length','start_time']
 
 def get_match_id(soup):
     match_id = match_id_parse.findall(soup.find('div',{'class':'content-header-title'}).text)[0]
@@ -134,7 +135,8 @@ def get_match_details(soup):
     match_details = np.append(match_id, details)
     match_details = np.append(match_details, time_stamp)
     match_details[0] = int(match_details[0])
-    return match_details
+    df = pd.DataFrame(np.reshape(match_details, (1,6)), columns=['match_id', 'tournament_name','game_mode','location','game_length','start_time'])
+    return df
     
 def duration_to_sec(dur_str):
     if ':' not in dur_str:
